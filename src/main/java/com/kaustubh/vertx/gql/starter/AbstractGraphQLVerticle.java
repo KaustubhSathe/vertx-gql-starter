@@ -1,5 +1,7 @@
+package com.kaustubh.vertx.gql.starter;
+
 import com.kaustubh.vertx.commons.utils.ConfigUtils;
-import config.HttpConfig;
+import com.kaustubh.vertx.gql.starter.config.HttpConfig;
 import graphql.GraphQL;
 import graphql.schema.GraphQLSchema;
 import graphql.schema.idl.SchemaGenerator;
@@ -10,7 +12,9 @@ import io.reactivex.rxjava3.core.Single;
 import io.vertx.core.Context;
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpServerOptions;
+import io.vertx.ext.web.handler.graphql.GraphiQLHandlerOptions;
 import io.vertx.rxjava3.core.AbstractVerticle;
+import io.vertx.rxjava3.core.RxHelper;
 import io.vertx.rxjava3.core.http.HttpServer;
 import io.vertx.rxjava3.core.http.HttpServerRequest;
 import io.vertx.rxjava3.ext.web.Router;
@@ -18,6 +22,7 @@ import io.vertx.rxjava3.ext.web.handler.BodyHandler;
 import io.vertx.rxjava3.ext.web.handler.ResponseContentTypeHandler;
 import io.vertx.rxjava3.ext.web.handler.StaticHandler;
 import io.vertx.rxjava3.ext.web.handler.graphql.GraphQLHandler;
+import io.vertx.rxjava3.ext.web.handler.graphql.GraphiQLHandler;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 
@@ -59,6 +64,17 @@ public class AbstractGraphQLVerticle extends AbstractVerticle {
                     log.error("Dropping request with status 503");
                     req.response().setStatusCode(503).end();
                 })
+                .observeOn(RxHelper.scheduler(new io.vertx.rxjava3.core.Context(this.context)))
+                .doOnNext(req -> router.handle(req))
+                .map(HttpServerRequest::resume)
+                .doOnError(error -> log.error("Uncaught ERROR while handling request", error))
+                .ignoreElements();
+
+        return server
+                .rxListen()
+                .doOnSuccess(res -> log.info("Started http server at " + options.getPort() + " package : " + this.packageName))
+                .doOnError(error -> log.error("Failed to start http server at port : " + options.getPort() + " with error " + error.getMessage()))
+                .doOnSubscribe(disposable -> handleRequests.subscribe());
     }
 
     protected Router getRouter(){
@@ -69,6 +85,9 @@ public class AbstractGraphQLVerticle extends AbstractVerticle {
         router.get("/liveness").handler(ctx -> ctx.response().end("Success!"));
         var graphQlHandler = GraphQLHandler.create(setupGraphQL());
         router.route("/graphql").handler(graphQlHandler);
+        GraphiQLHandlerOptions options = new GraphiQLHandlerOptions()
+                .setEnabled(true);
+        router.route("/graphiql/*").handler(GraphiQLHandler.create(options));
         return router;
     }
 
@@ -79,19 +98,22 @@ public class AbstractGraphQLVerticle extends AbstractVerticle {
             SchemaGenerator schemaGenerator = new SchemaGenerator();
             paths.filter(path -> com.google.common.io.Files.getFileExtension(path.getFileName().toString()) == "graphqls")
                         .forEach(x -> typeDefinitionRegistry.merge(schemaParser.parse(x.toFile())));
-            var runtimeWiring = newRuntimeWiring()
-                    .type(newTypeWiring("Query")
-                            .dataFetcher(() -> ()));
-            GraphQLSchema graphQLSchema = schemaGenerator.makeExecutableSchema(typeDefinitionRegistry,runtimeWiring);
+            var runtimeWiring = newRuntimeWiring();
+            AnnotationUtils.abstractDataFetcherList(this.packageName)
+                    .forEach(df -> runtimeWiring.type(newTypeWiring(df.getType()).dataFetcher(df.getParameter(),df.getDelegate())));
+            GraphQLSchema graphQLSchema = schemaGenerator.makeExecutableSchema(typeDefinitionRegistry,runtimeWiring.build());
             return GraphQL.newGraphQL(graphQLSchema).build();
         } catch (IOException e) {
             e.printStackTrace();
         }
+        return null;
     }
 
     @Override
     public Completable rxStart() {
-        return super.rxStart();
+        return startHttpServer().doOnSuccess(server -> {
+            this.httpServer = server;
+        }).ignoreElement();
     }
 
     @Override

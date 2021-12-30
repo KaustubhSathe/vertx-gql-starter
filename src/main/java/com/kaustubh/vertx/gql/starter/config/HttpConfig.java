@@ -1,4 +1,4 @@
-package config;
+package com.kaustubh.vertx.gql.starter.config;
 
 import com.typesafe.config.Optional;
 import lombok.Data;
