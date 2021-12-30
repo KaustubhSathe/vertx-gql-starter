@@ -1,10 +1,11 @@
 package com.kaustubh.vertx.gql.starter;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+
 import com.kaustubh.vertx.commons.guice.GuiceContext;
 import com.kaustubh.vertx.gql.starter.io.Error;
+import io.vertx.ext.web.handler.graphql.schema.VertxDataFetcher;
 import io.vertx.rxjava3.ext.web.RoutingContext;
-import io.vertx.rxjava3.ext.web.handler.graphql.schema.VertxDataFetcher;
+
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
