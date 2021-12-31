@@ -3,6 +3,7 @@ package com.kaustubh.vertx.gql.starter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kaustubh.vertx.gql.starter.exception.RestException;
 import com.kaustubh.vertx.gql.starter.io.Error;
+import com.kaustubh.vertx.gql.starter.io.Response;
 import graphql.schema.DataFetcher;
 import graphql.schema.DataFetchingEnvironment;
 import io.reactivex.rxjava3.core.Single;
@@ -18,7 +19,7 @@ import java.util.concurrent.CompletionStage;
 
 @Slf4j
 @Data
-public abstract class AbstractDataFetcher<T> implements DataFetcher<T> {
+public abstract class AbstractDataFetcher<T> implements DataFetcher<CompletionStage<Response<T>>> {
     private static final Error INVALID_PARAM_ERROR = Error.of("MG1000", "Missing Parameters");
     private static final RestException INVALID_REST_EXCEPTION = new RestException("Invalid or Missing Request Params.", INVALID_PARAM_ERROR);
 
@@ -26,6 +27,7 @@ public abstract class AbstractDataFetcher<T> implements DataFetcher<T> {
     private List<String> requiredHeaders;
     private String type;
     private String parameter;
+    private HttpMethod httpMethod;
     private String produces;
     private String consumes;
     private long timeout;
@@ -40,6 +42,22 @@ public abstract class AbstractDataFetcher<T> implements DataFetcher<T> {
         httpServerResponse.putHeader("content-type", produces);
         return httpServerResponse;
     }
+
+    protected Single<Request> validateRequest(Request request){
+        try{
+           if(httpMethod.equals(HttpMethod.POST)){
+               validateRequestHeaders(request.getHeaders());
+               return Single.just(request);
+           }else{
+               throw new Exception("HTTP Method must be POST");
+           }
+        }catch (Exception e) {
+            log.error("Error in request! headers required : {}, headers received : {}", requiredHeaders,request.getHeaders(),e);
+            return Single.error(e);
+        }
+    }
+
+    
 
     protected void validateRequestHeaders(MultiMap headers) throws Exception {
         if(!Optional.ofNullable(getRequiredHeaders())
@@ -59,10 +77,41 @@ public abstract class AbstractDataFetcher<T> implements DataFetcher<T> {
     }
 
     @Override
-    public T get(DataFetchingEnvironment var1) throws Exception {
-            
+    public CompletionStage<Response<T>> get(DataFetchingEnvironment env) throws Exception {
+         final long startTime = System.currentTimeMillis();
+         final Request request = new Request(
+                 env,
+                 null,
+                 null
+         );
+
+         return validateRequest(request)
+                 .flatMap(req -> this.get(req))
+                 .toCompletionStage();
     }
 
-    public abstract Single<T> get(Request request) throws Exception;
+    public abstract Single<Response<T>> get(Request request) throws Exception;
 
+    @Override
+    public boolean equals(Object o){
+        if(this == o){
+            return true;
+        }
+        if(o == null || this.getClass() != o.getClass()){
+            return false;
+        }
+        var that = (AbstractDataFetcher<?>) o;
+        return Objects.equals(this.getType(), that.getType()) && Objects.equals(this.getParameter(), that.getParameter());
+    }
+
+    @Override
+    public int hashCode(){
+        return Objects.hash(this.getType(), this.getParameter());
+    }
+
+    protected Throwable handleError(Throwable throwable){
+        return throwable;
+    }
+
+ 
 }
