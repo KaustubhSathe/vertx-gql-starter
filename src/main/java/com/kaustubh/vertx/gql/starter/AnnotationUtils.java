@@ -40,7 +40,7 @@ public class AnnotationUtils {
                     if (fetcherAnnotation != null) {
                         AbstractDataFetcher dataFetcher = (AbstractDataFetcher) GuiceContext.getInstance(clazz);
                         dataFetcher.setType(fetcherAnnotation.type());
-                        dataFetcher.setParameter(fetcherAnnotation.parameter());
+                        dataFetcher.setField(fetcherAnnotation.field());
                         dataFetcher.setRequiredHeaders(Arrays.asList(fetcherAnnotation.requiredHeaders()));
                         dataFetcher.setConsumes(fetcherAnnotation.consumes());
                         dataFetcher.setProduces(fetcherAnnotation.produces());

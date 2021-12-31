@@ -9,7 +9,7 @@ import java.lang.annotation.Target;
 @Target({ElementType.TYPE, ElementType.ANNOTATION_TYPE})
 public @interface Fetcher {
     String type();
-    String parameter();
+    String field();
     String produces() default "application/json";
     String consumes() default "application/json";
     String[] requiredHeaders() default {};

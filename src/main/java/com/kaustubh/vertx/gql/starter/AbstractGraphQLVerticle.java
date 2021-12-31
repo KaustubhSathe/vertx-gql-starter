@@ -28,8 +28,10 @@ import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 
 import java.io.IOException;
+import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.Objects;
 
 import static graphql.schema.idl.RuntimeWiring.newRuntimeWiring;
 import static graphql.schema.idl.TypeRuntimeWiring.newTypeWiring;
@@ -39,25 +41,36 @@ public class AbstractGraphQLVerticle extends AbstractVerticle {
     private final String packageName;
     private HttpServer httpServer;
     private HttpConfig httpConfig;
-    public AbstractGraphQLVerticle(String packageName){
+
+    public AbstractGraphQLVerticle(String packageName) {
         this.packageName = packageName;
     }
 
     @Override
     public void init(Vertx vertx, Context context) {
         super.init(vertx, context);
-        httpConfig = ConfigUtils.fromConfigFile("config/http-server/http-server-%s.conf", HttpConfig.class);
+        this.httpConfig = ConfigUtils.fromConfigFile("config/http-server/http-server-%s.conf", HttpConfig.class);
     }
 
-    private Single<HttpServer> startHttpServer(){
-        HttpServerOptions options = new HttpServerOptions()
+    private Single<HttpServer> startHttpServer() {
+        HttpServerOptions httpServerOptions = new HttpServerOptions()
                 .setHost(httpConfig.getHost())
                 .setPort(httpConfig.getPort())
+                .setCompressionLevel(httpConfig.getCompressionLevel())
+                .setCompressionSupported(httpConfig.isCompressionEnabled())
                 .setIdleTimeout(httpConfig.getIdleTimeOut())
-                .setUseAlpn(httpConfig.isUseAlpn());
+                .setReusePort(httpConfig.isReusePort())
+                .setReuseAddress(httpConfig.isReuseAddress())
+                .setTcpFastOpen(httpConfig.isTcpFastOpen())
+                .setTcpNoDelay(httpConfig.isTcpNoDelay())
+                .setTcpQuickAck(httpConfig.isTcpQuickAck())
+                .setTcpKeepAlive(httpConfig.isTcpKeepAlive())
+                .setUseAlpn(httpConfig.isUseAlpn())
+                .setSsl(httpConfig.isUseSsl());
+
 
         Router router = getRouter();
-        val server = vertx.createHttpServer(options);
+        val server = vertx.createHttpServer(httpServerOptions);
         val handleRequests = server.requestStream()
                 .toFlowable()
                 .map(HttpServerRequest::pause)
@@ -73,38 +86,38 @@ public class AbstractGraphQLVerticle extends AbstractVerticle {
 
         return server
                 .rxListen()
-                .doOnSuccess(res -> log.info("Started http server at " + options.getPort() + " package : " + this.packageName))
-                .doOnError(error -> log.error("Failed to start http server at port : " + options.getPort() + " with error " + error.getMessage()))
+                .doOnSuccess(res -> log.info("Started http server at " + httpServerOptions.getPort() + " package : " + this.packageName))
+                .doOnError(error -> log.error("Failed to start http server at port : " + httpServerOptions.getPort() + " with error " + error.getMessage()))
                 .doOnSubscribe(disposable -> handleRequests.subscribe());
     }
 
-    protected Router getRouter(){
+    protected Router getRouter() {
         Router router = Router.router(this.vertx);
         router.route().handler(BodyHandler.create());
         router.route().handler(ResponseContentTypeHandler.create());
         router.route().handler(StaticHandler.create());
         router.get("/liveness").handler(ctx -> ctx.response().end("Success!"));
-        var graphQlHandler = GraphQLHandler.create(setupGraphQL());
+        var graphQlHandler = GraphQLHandler.create(this.setupGraphQL());
         router.route("/graphql").handler(graphQlHandler);
-        GraphiQLHandlerOptions options = new GraphiQLHandlerOptions()
+        GraphiQLHandlerOptions graphiQLHandlerOptions = new GraphiQLHandlerOptions()
                 .setEnabled(true);
-        router.route("/graphiql/*").handler(GraphiQLHandler.create(options));
+        router.route("/graphiql/*").handler(GraphiQLHandler.create(graphiQLHandlerOptions));
         return router;
     }
 
-    private GraphQL setupGraphQL(){
-        try(var paths = Files.walk(Paths.get("/graphqls"))){
+    private GraphQL setupGraphQL() {
+        try (var paths = Files.walk(Paths.get(this.getClass().getClassLoader().getResource("graphqls").toURI()))) {
             TypeDefinitionRegistry typeDefinitionRegistry = new TypeDefinitionRegistry();
             SchemaParser schemaParser = new SchemaParser();
             SchemaGenerator schemaGenerator = new SchemaGenerator();
-            paths.filter(path -> com.google.common.io.Files.getFileExtension(path.getFileName().toString()) == "graphqls")
-                        .forEach(x -> typeDefinitionRegistry.merge(schemaParser.parse(x.toFile())));
+            paths.filter(path -> Objects.equals(com.google.common.io.Files.getFileExtension(path.getFileName().toString()),"graphqls"))
+                    .forEach(x -> typeDefinitionRegistry.merge(schemaParser.parse(x.toFile())));
             var runtimeWiring = newRuntimeWiring();
             AnnotationUtils.abstractDataFetcherList(this.packageName)
-                    .forEach(df -> runtimeWiring.type(newTypeWiring(df.getType()).dataFetcher(df.getParameter(), df)));
-            GraphQLSchema graphQLSchema = schemaGenerator.makeExecutableSchema(typeDefinitionRegistry,runtimeWiring.build());
+                    .forEach(df -> runtimeWiring.type(newTypeWiring(df.getType()).dataFetcher(df.getField(), df)));
+            GraphQLSchema graphQLSchema = schemaGenerator.makeExecutableSchema(typeDefinitionRegistry, runtimeWiring.build());
             return GraphQL.newGraphQL(graphQLSchema).build();
-        } catch (IOException e) {
+        } catch (IOException | URISyntaxException e) {
             e.printStackTrace();
         }
         return null;

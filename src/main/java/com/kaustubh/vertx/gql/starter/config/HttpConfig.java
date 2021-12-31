@@ -24,7 +24,7 @@ public class HttpConfig {
     private int compressionLevel = DEFAULT_COMPRESSION_LEVEL;
 
     @Optional
-    private boolean compressionEnabled = false;
+    private boolean compressionEnabled = true;
 
     @Optional
     private int idleTimeOut = IDLE_TIMEOUT;
@@ -49,6 +49,11 @@ public class HttpConfig {
 
     @Optional
     private boolean useAlpn = true;
+
+    @Optional
+    private boolean useSsl = false;
+
+
 
     public int getPort() {
         return port > 0 ? port : Integer.parseInt(System.getProperty("http.default.port", "8080"));

@@ -2,8 +2,7 @@ package com.kaustubh.vertx.gql.starter;
 
 import graphql.schema.DataFetchingEnvironment;
 import io.vertx.core.json.JsonObject;
-import io.vertx.rxjava3.core.MultiMap;
-import io.vertx.rxjava3.ext.web.RoutingContext;
+import io.vertx.core.MultiMap;
 import lombok.AllArgsConstructor;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
@@ -15,7 +14,6 @@ public class Request {
     DataFetchingEnvironment environment;
     MultiMap headers;
     JsonObject body;
-
 
     public String getHeader(String name){
         return headers != null ? headers.get(name) : null;
