@@ -13,6 +13,7 @@ import io.vertx.core.Context;
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpServerOptions;
 import io.vertx.ext.web.handler.graphql.GraphiQLHandlerOptions;
+import io.vertx.ext.web.handler.graphql.schema.VertxDataFetcher;
 import io.vertx.rxjava3.core.AbstractVerticle;
 import io.vertx.rxjava3.core.RxHelper;
 import io.vertx.rxjava3.core.http.HttpServer;
@@ -100,7 +101,7 @@ public class AbstractGraphQLVerticle extends AbstractVerticle {
                         .forEach(x -> typeDefinitionRegistry.merge(schemaParser.parse(x.toFile())));
             var runtimeWiring = newRuntimeWiring();
             AnnotationUtils.abstractDataFetcherList(this.packageName)
-                    .forEach(df -> runtimeWiring.type(newTypeWiring(df.getType()).dataFetcher(df.getParameter(),df.getDelegate())));
+                    .forEach(df -> runtimeWiring.type(newTypeWiring(df.getType()).dataFetcher(df.getParameter(), df)));
             GraphQLSchema graphQLSchema = schemaGenerator.makeExecutableSchema(typeDefinitionRegistry,runtimeWiring.build());
             return GraphQL.newGraphQL(graphQLSchema).build();
         } catch (IOException e) {
